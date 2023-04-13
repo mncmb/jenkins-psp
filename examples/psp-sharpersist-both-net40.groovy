@@ -7,7 +7,7 @@ pipeline {
         OBS_TOOLNAME = "shurparsley"
         GITURL = "https://github.com/mandiant/SharPersist"
         BRANCH = "master"
-        WORKDIR = "C:\\Users\\Vagrant\\Downloads\\jenkins-psp"           // git-cloned directory 
+        WORKDIR = "C:\\opt\\jenkins-psp"           // git-cloned directory 
         
         PSP_OUTPUT = "${WORKDIR}\\output\\Invoke-${OBS_TOOLNAME}.ps1"
         OBS_PSP_OUTPUT = "${WORKDIR}\\output\\Obs-Invoke-${OBS_TOOLNAME}.ps1"

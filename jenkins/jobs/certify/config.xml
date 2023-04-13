@@ -1,0 +1,203 @@
+<?xml version='1.1' encoding='UTF-8'?>
+<flow-definition plugin="workflow-job@1289.vd1c337fd5354">
+  <actions>
+    <org.jenkinsci.plugins.pipeline.modeldefinition.actions.DeclarativeJobAction plugin="pipeline-model-definition@2.2125.vddb_a_44a_d605e"/>
+    <org.jenkinsci.plugins.pipeline.modeldefinition.actions.DeclarativeJobPropertyTrackerAction plugin="pipeline-model-definition@2.2125.vddb_a_44a_d605e">
+      <jobProperties/>
+      <triggers/>
+      <parameters/>
+      <options/>
+    </org.jenkinsci.plugins.pipeline.modeldefinition.actions.DeclarativeJobPropertyTrackerAction>
+  </actions>
+  <description></description>
+  <keepDependencies>false</keepDependencies>
+  <properties/>
+  <definition class="org.jenkinsci.plugins.workflow.cps.CpsFlowDefinition" plugin="workflow-cps@3653.v07ea_433c90b_4">
+    <script>pipeline { 
+    agent any
+    
+    environment { 
+        // &lt;&lt; CHANGE THESE &gt;&gt; 
+        TOOLNAME = &quot;Certify&quot;
+        OBS_TOOLNAME = &quot;Coortify&quot;
+        GITURL = &quot;https://github.com/GhostPack/Certify.git&quot;
+        BRANCH = &quot;main&quot;
+        WORKDIR = &quot;C:\\opt\\jenkins-psp&quot;           // git-cloned directory 
+        
+        PSP_OUTPUT = &quot;${WORKDIR}\\output\\Invoke-${OBS_TOOLNAME}.ps1&quot;
+        OBS_PSP_OUTPUT = &quot;${WORKDIR}\\output\\Obs-Invoke-${OBS_TOOLNAME}.ps1&quot;
+
+        // &lt;&lt; CHANGE THESE &gt;&gt; - .NET Compile configs
+        CONFIG=&quot;Release&quot;
+        PLATFORM=&quot;Any CPU&quot;
+        DOTNETVERSION=&quot;v4.0&quot;
+        DOTNETNUMBER=&quot;net40&quot;
+        
+        // 3rd party tools 
+        INVISCLOAKPATH = &quot;${WORKDIR}\\InvisibilityCloak\\InvisibilityCloak.py&quot;
+        CHAMELEONPATH = &quot;${WORKDIR}\\chameleon\\chameleon.py&quot;
+        EMBEDDOTNETPATH = &quot;${WORKDIR}\\embedDotNet.ps1&quot;
+        PREPPSPPATH = &quot;${WORKDIR}\\PSPprep.ps1&quot;
+        TEMPLATEPATH = &quot;${WORKDIR}\\template.ps1&quot;
+        CONFUSERPREP = &quot;${WORKDIR}\\confuserEx.ps1&quot;
+    }
+
+    
+    stages {
+        stage(&apos;Cleanup&apos;){
+            steps{
+                deleteDir()
+                dir(&quot;${TOOLNAME}&quot;){
+                    deleteDir()
+                }
+            }
+        }
+
+        // Try main, then master for old github repos.
+        stage(&apos;Git-Clone&apos;){
+            steps{
+                script {     
+                    checkout([
+                        $class: &apos;GitSCM&apos;,
+                        branches: [[name: &quot;*/${BRANCH}&quot;]],
+                        userRemoteConfigs: [[url: &quot;${GITURL}&quot;]]
+                    ]) 
+                }
+            }
+        }
+
+        // Skip prep powersharppack if the tool already has public class/main function.
+        stage(&apos;Prep-PSP&apos;){
+            steps{
+                powershell &quot;${PREPPSPPATH} -inputDir ${WORKSPACE} -toolName ${TOOLNAME}&quot;
+            }
+        }
+
+        // Obfuscate with invisibilitycloak. 
+        stage(&apos;InvisibilityCloak-Obfuscate&apos;) { 
+            steps { 
+                bat &quot;&quot;&quot;python ${INVISCLOAKPATH} -d ${WORKSPACE} -n ${OBS_TOOLNAME} -m rot13 &quot;&quot;&quot;
+            }
+        }
+
+        // Some projects doesn&apos;t need nuget restore. Continue on failure.
+        // TODO: what&apos;s this &quot;msbuild PROJECT.sln /t:Restore /p:Configuration=Release&quot;
+        stage(&apos;Nuget-Restore&apos;){
+            steps{
+                script{
+                    def slnPath = powershell(returnStdout: true, script: &quot;(Get-ChildItem -Path ${WORKSPACE} -Include &apos;${OBS_TOOLNAME}.sln&apos; -Recurse).FullName&quot;)
+                    env.SLNPATH = slnPath
+                    
+                    try{ 
+                        bat &quot;nuget restore ${SLNPATH}&quot;
+                    }
+                    catch(Exception e){
+                        catchError(buildResult: &apos;SUCCESS&apos;, stageResult: &apos;FAILURE&apos;) {
+                            bat &quot;&quot;&quot;dotnet restore ${SLNPATH} &quot;&quot;&quot;
+                        }
+                    }
+                }
+            }
+        }
+
+        // If Compilation fails due to invisiblity cloak, run without string obfuscation (delete -m rot 13)
+        stage(&apos;Compile&apos;){ 
+            steps {
+                script{
+                    def slnPath = powershell(returnStdout: true, script: &quot;(Get-ChildItem -Path ${WORKSPACE} -Include &apos;${OBS_TOOLNAME}.sln&apos; -Recurse).FullName&quot;)
+                    env.SLNPATH = slnPath
+                    
+                    try{
+                        bat &quot;\&quot;${tool &apos;MSBuild_VS2019&apos;}\\MSBuild.exe\&quot; /p:Configuration=${CONFIG} \&quot;/p:Platform=${PLATFORM}\&quot; /maxcpucount:%NUMBER_OF_PROCESSORS% /nodeReuse:false /p:DebugType=None /p:DebugSymbols=false /p:TargetFrameworkMoniker=\&quot;.NETFramework,Version=${DOTNETVERSION}\&quot; ${SLNPATH}&quot; 
+                    }   
+                    catch(Exception e){
+                        catchError(buildResult: &apos;SUCCESS&apos;, stageResult: &apos;FAILURE&apos;) {
+                            bat &quot;&quot;&quot;dotnet build --configuration ${CONFIG} ${SLNPATH} &quot;&quot;&quot; 
+                        }
+                    }  
+                }
+            }
+        }
+
+        // ConfuserEx only when it&apos;s not net5.0++. Only execute this stage when the dotnet version contains &quot;v&quot; ex. v3.5
+        stage(&apos;ConfuserEx&apos;){
+            when {
+                expression { env.DOTNETVERSION.contains(&apos;v&apos;)} 
+            }
+            steps{
+                script{ 
+                    // Some projects have net45/net35, some projects doesn&apos;t. So many one-offs        
+                    def exePath = powershell(returnStdout: true, script: &quot;&quot;&quot;
+                    \$exeFiles = (Get-ChildItem -Path ${WORKSPACE} -Include &apos;*.exe&apos; -Recurse | Where-Object {\$_.DirectoryName -match &apos;release&apos; -and \$_.DirectoryName -match &apos;bin&apos; } ).FullName
+                    if (\$exeFiles -match &quot;${DOTNETNUMBER}&quot;){
+                        \$exeFiles.trim()
+                    }
+                    else{
+                        (Get-ChildItem -Path ${WORKSPACE} -Include &apos;*.exe&apos; -Recurse | Where-Object {\$_.DirectoryName -match &apos;release&apos;} )[0].FullName
+                    }
+                    &quot;&quot;&quot;)
+                    env.EXEPATH = exePath
+
+                    // Continue on failure. 
+                    catchError(buildResult: &apos;SUCCESS&apos;, stageResult: &apos;FAILURE&apos;){
+                        // Copy all dependency dlls to the same dir as the EXE file 
+                        powershell(returnStdout:true, script: &quot;&quot;&quot;
+                            \$dllFiles = (Get-ChildItem -Path ${WORKSPACE} -Include &apos;*.dll&apos; -Recurse).FullName
+                            if (\$dllFiles -match &quot;${DOTNETNUMBER}&quot;){
+                                \$dllFiles -match &quot;${DOTNETNUMBER}&quot; | copy-item -destination (split-path \&quot;${EXEPATH}\&quot;.trim() -Resolve)
+                            }
+                            else{
+                                \$dllFiles | copy-item -destination (split-path \&quot;${EXEPATH}\&quot;.trim() -Resolve)
+                            }
+                        &quot;&quot;&quot;)
+
+                        // Generate confuserEx project file using `confuserEx.ps1` script 
+                        powershell(returnStdout:true, script:&quot;${CONFUSERPREP} -exePath \&quot;${EXEPATH}\&quot;.trim() -outDir ${WORKSPACE}\\Confused -level normal -toolName ${OBS_TOOLNAME} &quot;)
+
+                        // Run confuserEx with the project file generated above
+                        bat &quot;Confuser.CLI.exe ${WORKSPACE}\\Confused\\${OBS_TOOLNAME}.crproj&quot;
+
+                        echo &quot;[!] ConfuserEx failed. Skipping Obfuscation.&quot;
+                    }
+                }
+            }
+        }
+
+        stage(&apos;Create-PSP&apos;){
+            steps{
+                script{
+                    def exePath = powershell(returnStdout: true, script: &quot;(Get-ChildItem -Path ${WORKSPACE} -Include &apos;*.exe&apos; -Recurse | Where-Object {\$_.DirectoryName -match &apos;Confused&apos;} ).FullName&quot;)
+                    env.EXEPATH = exePath
+                    
+                    // If confuserEx failed, just use the regular bin.
+                    if (env.EXEPATH == &apos;&apos;){
+                        exePath = powershell(returnStdout: true, script: &quot;&quot;&quot;
+                            \$exeFiles = (Get-ChildItem -Path ${WORKSPACE} -Include &apos;*.exe&apos; -Recurse | Where-Object {\$_.DirectoryName -match &apos;release&apos; -and \$_.DirectoryName -match &apos;bin&apos; } ).FullName
+                            if (\$exeFiles -match &quot;${DOTNETNUMBER}&quot;){
+                                \$exeFiles.trim()
+                            }
+                            else{
+                                (Get-ChildItem -Path ${WORKSPACE} -Include &apos;*.exe&apos; -Recurse | Where-Object {\$_.DirectoryName -match &apos;release&apos;} )[0].FullName
+                            }
+                            &quot;&quot;&quot;)
+                        env.EXEPATH = exePath
+                    }
+
+                    // Beaware of environment variable created from ps in jenkins (exePath). Always .trim() INSIDE powershell.
+                    powershell &quot;${EMBEDDOTNETPATH} -inputFile \&quot;${EXEPATH}\&quot;.trim() -outputFile ${PSP_OUTPUT} -templatePath ${TEMPLATEPATH} -toolName ${OBS_TOOLNAME}&quot;
+                }
+            }
+        }
+
+        stage(&apos;Obfuscate-PSP&apos;){
+            steps{
+                bat encoding: &apos;UTF-8&apos;, script: &quot;&quot;&quot;python ${CHAMELEONPATH} -v -d -c -f -r -i -l 4 ${PSP_OUTPUT} -o ${OBS_PSP_OUTPUT}&quot;&quot;&quot;
+            }
+        }
+    }
+}</script>
+    <sandbox>true</sandbox>
+  </definition>
+  <triggers/>
+  <disabled>false</disabled>
+</flow-definition>

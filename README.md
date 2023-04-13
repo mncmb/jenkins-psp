@@ -1,5 +1,16 @@
+# info
+[forked from jenkins-psp](https://github.com/ChoiSG/jenkins-psp)
 
-# DEPRECATED. Use Offensive-Jenkins instead. PUBLIC WHEN IDK
+- added `install-jenkins.ps1` to setup jenkins and install all necessary dependencies on a system with chocolatey
+- added `psp-sharpersist-both-net40.groovy` pipeline in examples
+- statically included chameleon and invisbilitycloak
+- deploy jenkins with preconfigured jobs
+
+
+## TODO 
+- jenkins [shared libraries](https://www.jenkins.io/doc/book/pipeline/shared-libraries/) 
+    - include assembly with psp output
+    - replace dotnet v3.5 targets with v4.0
 
 ---
 
