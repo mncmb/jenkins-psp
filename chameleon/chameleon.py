@@ -1067,7 +1067,8 @@ class Console:
 
 
 def welcome():
-    banner = rf"""{Fore.RED}__________________________________________________________________________________
+    banner = ""
+    rf"""{Fore.RED}__________________________________________________________________________________
     
   {Fore.LIGHTRED_EX}▒▒▒▒▒▒  {Fore.RED}▒▒   ▒▒ {Fore.LIGHTBLUE_EX} ▒▒▒▒▒  {Fore.BLUE}▒▒▒    ▒▒▒ {Fore.LIGHTYELLOW_EX}▒▒▒▒▒▒▒ {Fore.YELLOW}▒▒     {Fore.LIGHTGREEN_EX}▒▒▒▒▒▒▒ {Fore.GREEN} ▒▒▒▒▒  {Fore.LIGHTCYAN_EX}▒▒▒  ▒▒ {Fore.CYAN} ▒▒▒
   {Fore.LIGHTRED_EX}▒▒      {Fore.RED}▒▒   ▒▒ {Fore.LIGHTBLUE_EX}▒▒   ▒▒ {Fore.BLUE}▒▒▒▒  ▒▒▒▒ {Fore.LIGHTYELLOW_EX}▒▒      {Fore.YELLOW}▒▒     {Fore.LIGHTGREEN_EX}▒▒      {Fore.GREEN}▒▒   ▒▒ {Fore.LIGHTCYAN_EX}▒▒▒▒ ▒▒ {Fore.CYAN}▒▒▒▒

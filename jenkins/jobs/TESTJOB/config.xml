@@ -1,0 +1,78 @@
+<?xml version='1.1' encoding='UTF-8'?>
+<flow-definition plugin="workflow-job@1289.vd1c337fd5354">
+  <actions>
+    <org.jenkinsci.plugins.pipeline.modeldefinition.actions.DeclarativeJobAction plugin="pipeline-model-definition@2.2125.vddb_a_44a_d605e"/>
+    <org.jenkinsci.plugins.pipeline.modeldefinition.actions.DeclarativeJobPropertyTrackerAction plugin="pipeline-model-definition@2.2125.vddb_a_44a_d605e">
+      <jobProperties/>
+      <triggers/>
+      <parameters/>
+      <options/>
+    </org.jenkinsci.plugins.pipeline.modeldefinition.actions.DeclarativeJobPropertyTrackerAction>
+  </actions>
+  <description></description>
+  <keepDependencies>false</keepDependencies>
+  <properties/>
+  <definition class="org.jenkinsci.plugins.workflow.cps.CpsFlowDefinition" plugin="workflow-cps@3653.v07ea_433c90b_4">
+    <script>pipeline { 
+    agent any
+
+    environment { 
+        TEST=&quot;Hardcoding everything for now&quot;
+    }
+
+    stages {
+        stage(&apos;Cleanup&apos;){
+            steps{
+                deleteDir()
+            }
+        }
+
+        stage(&apos;Jenkins-check&apos;){
+            steps{
+                echo &quot;Hello, Jenkins&quot;
+            }
+        }
+        
+        stage(&apos;Python-check&apos;){
+            steps{
+                bat &quot;&quot;&quot;python --version&quot;&quot;&quot;
+            }
+        }
+
+        stage(&apos;Powershell-check&apos;){
+            steps{
+                powershell(returnStdout:true, script:&quot;echo &apos;Hello Powershell&apos;&quot;)
+            }
+        }
+
+        stage(&apos;Git-check&apos;){
+            steps{
+                git branch:&apos;main&apos;, url: &apos;https://github.com/GhostPack/Certify.git&apos;
+            }
+        }
+
+        stage(&apos;nuget-check&apos;){
+            steps{
+                bat &quot;nuget restore ${WORKSPACE}\\Certify.sln&quot;
+            }
+        }
+
+        stage(&apos;MSBuild-check&apos;){
+            steps{
+                bat &quot;\&quot;${tool &apos;MSBuild_VS2019&apos;}\\MSBuild.exe\&quot; /p:Configuration=Release \&quot;/p:Platform=Any CPU\&quot; /maxcpucount:%NUMBER_OF_PROCESSORS% /nodeReuse:false /p:TargetFrameworkMoniker=\&quot;.NETFramework,Version=v4.8\&quot; ${WORKSPACE}\\Certify.sln&quot; 
+            }
+        }
+
+        stage(&apos;Final-check&apos;){
+            steps{
+                echo &quot;Hello compiled Certify.exe!&quot;
+                bat &quot;dir ${WORKSPACE}\\Certify\\bin\\Release\\&quot;
+            }
+        }
+    }
+}</script>
+    <sandbox>true</sandbox>
+  </definition>
+  <triggers/>
+  <disabled>false</disabled>
+</flow-definition>
